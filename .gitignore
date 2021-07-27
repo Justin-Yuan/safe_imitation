@@ -3,3 +3,12 @@
 
 # Ada Library Information
 *.ali
+
+
+# experiment results 
+results
+results/
+results/*
+
+# miscellaneous 
+.vscode
