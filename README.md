@@ -4,7 +4,15 @@ safe imitation learning
 
 ## Installation
 
-install via `setup.py` as developer mode. once pip installed, module import can start from module `safe_il`, i.e. `import safe_il.xxx.xxx`. any changes in the `safe_il` folder will also be reflected.
+Install the gym-minigrid dependency and matplotlib prior to setting up the main project
+
+```bash
+cd dependencies/gym-minigrid
+pip install -e .
+pip install matplotlib
+```
+
+Install via `setup.py` as developer mode. Once pip installed, module import can start from module `safe_il`, i.e. `import safe_il.xxx.xxx`. any changes in the `safe_il` folder will also be reflected.
 
 ```bash
 pip install -e .
