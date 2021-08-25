@@ -1,0 +1,1 @@
+from safe_il.envs.simple_navigation import SimpleNavigation
