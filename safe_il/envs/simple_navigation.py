@@ -10,14 +10,11 @@ import math
 import Box2D
 from Box2D.Box2D import (
     b2CircleShape, b2Distance, b2PolygonShape, b2Vec2)
-from gym.core import RewardWrapper
 import numpy as np
-
 
 import gym
 from gym import spaces
 from gym.utils import seeding, EzPickle
-
 
 import logging
 logger = logging.getLogger(__name__)
@@ -30,6 +27,7 @@ FPS = 60
 SCALE = 30.0
 
 NUM_OBSTACLES = 3
+
 
 class SimpleNavigation(gym.Env, EzPickle):
     metadata = {"render.modes": ["human", "rgb_array"],
@@ -51,7 +49,8 @@ class SimpleNavigation(gym.Env, EzPickle):
         else:
             # Observation space is distance in X and Y to Goal and Obstacles
             self.observation_space = spaces.Box(
-                -np.inf, np.inf, shape=(8,), dtype=np.float32)
+                -np.inf, np.inf, shape=(NUM_OBSTACLES * 2 + 2,),
+                dtype=np.float32)
 
         self.viewer = None
 
@@ -61,7 +60,6 @@ class SimpleNavigation(gym.Env, EzPickle):
         self.agent_start_pos = (0, 0)
         self.goal_pos = (0, 0)
         self.agent = None
-        self.state = None
         self.done = None
         self.episode_steps = 0
         self.horizon = 500
@@ -80,6 +78,7 @@ class SimpleNavigation(gym.Env, EzPickle):
         vel_iters, pos_iters = 6, 2
         self.world.Step(timeStep, vel_iters, pos_iters)
 
+        self.episode_steps += 1
         self.done = self.episode_steps >= self.horizon
 
         # TODO(mustafa): Currently only returning vector-based obs,
