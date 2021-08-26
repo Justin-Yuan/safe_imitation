@@ -21,6 +21,14 @@ pip install matplotlib
 
 ## Examples
 
+Use the gym API to create and step through the environments. You can find the 
+environment ID's in the __init__.py file
+
+```python
+import gym
+gym.make('safe_il:BoneDrilling2D-v0')
+```
+
 suppose there's a main script (using stuff in `safe_il`)
 
 ```bash
