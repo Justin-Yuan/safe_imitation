@@ -7,6 +7,7 @@ To demo the environment and visualize the randomized scene try:
 python safe_il/envs/bone_drilling_2d.py
 """
 
+from hashlib import new
 import math
 import Box2D
 from Box2D.Box2D import (
@@ -26,12 +27,25 @@ VIEWPORT_W = 600
 VIEWPORT_H = 600
 FPS = 60
 SCALE = 30.0
-# NOTE(mustafa): The enviornment works on a scaled resolution, 
-# so all positing should be scaled to this. Just normalize everything [0,1]
+# NOTE(mustafa): The enviornment works on a scaled resolution,
+# so all positioning should be scaled to this. Just normalize everything [0,1]
 # and then multiply by this constant for now, need to look at this closer after
 SCALED_MULTIP = VIEWPORT_H / SCALE
 
 NUM_OBSTACLES = 3
+
+'''
+NOTE(mustafa):
+Currently using a simple grid structure of bones, coming into contact with the 
+bones rigidbody removes that body from the world. Might change to custom
+polygon shapes in the future, allowing for custom geometry that matches the 
+shape of the drillbit
+'''
+
+
+class BoneData():
+    def __init__(self):
+        self.flagged_destroy = False
 
 
 class ContactDetector(b2ContactListener):
@@ -48,6 +62,11 @@ class ContactDetector(b2ContactListener):
             self.env.game_over = True
 
         # Check contact on bone structures
+        if self.env.agent in bodies:
+            if bodies[0] == self.env.agent:
+                contact.fixtureB.body.userData.flagged_destroy = True
+            else:
+                contact.fixtureA.body.userData.flagged_destroy = True
 
     def EndContact(self, contact):
         pass
@@ -88,6 +107,7 @@ class BoneDrilling2D(gym.Env, EzPickle):
 
         self.obstacles = []
         self.walls = []
+        self.bones = []
         self.agent_start_pos = (0, 0)
         self.goal_pos = (0, 0)
         self.agent = None
@@ -116,6 +136,12 @@ class BoneDrilling2D(gym.Env, EzPickle):
 
         self.episode_steps += 1
         self.done = self.episode_steps >= self.horizon
+
+        # During the step we can't destroy bodies, so we destroy them now
+        for bone in self.bones:
+            if bone.userData.flagged_destroy:
+                self.world.DestroyBody(bone)
+                self.bones.remove(bone)
 
         # TODO(mustafa): Currently only returning vector-based obs,
         # rgb_array obs will come from render function, might need to rewrite
@@ -190,11 +216,25 @@ class BoneDrilling2D(gym.Env, EzPickle):
             new_wall.color = (0, 0, 0)
             self.walls.append(new_wall)
 
+        # Generate the bone structure as a grid
+        # NOTE(mustafa): currently using the scaled width of the env
+        GRID_SIZE = int(SCALED_MULTIP) - 5
+        CELL_LENGTH = 0.5
+        for x in range(GRID_SIZE):
+            for y in range(GRID_SIZE):
+                new_bone = self.world.CreateStaticBody(
+                    shapes=b2PolygonShape(box=(CELL_LENGTH, CELL_LENGTH)),
+                    position=((CELL_LENGTH * x) + 4, (CELL_LENGTH * y) + 4),
+                    userData=BoneData()
+                )
+                new_bone.color = (0.9, 0.9, 0.5)  # Beige Color
+                self.bones.append(new_bone)
+
         # TODO(mustafa): we might not need a drawlist, all bodies are stored
         # in the world object, but just storing them all explicity for now
 
         # Add all render objects to drawlist to loop over during
-        self.drawlist = [self.agent, self.goal] + self.obstacles + self.walls
+        self.drawlist = [self.agent, self.goal] + self.obstacles + self.walls + self.bones
 
         print('Environment has been reset!')
 
@@ -242,8 +282,12 @@ class BoneDrilling2D(gym.Env, EzPickle):
         for wall in self.walls:
             self.world.DestroyBody(wall)
 
+        for bone in self.bones:
+            self.world.DestroyBody(bone)
+
         self.obstacles = []
         self.walls = []
+        self.bones = []
         self.agent = None
         self.goal = None
 
@@ -290,10 +334,9 @@ def demo_bone_drilling_2d(env, render=False, manual_control=False):
     total_reward = 0
 
     state = env.reset()
-    for _ in range(1000):
+    for _ in range(10000):
         if manual_control:
             action = a
-            print(a)
         else:
             action = env.action_space.sample()
         state, reward, done, info = env.step(action)
