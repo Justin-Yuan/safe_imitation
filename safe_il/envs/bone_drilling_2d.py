@@ -1,5 +1,6 @@
 """
-Simple navigation environment with obstacles to avoid to reach the goal.
+Bone Drilling environment to reach the goal and avoid obstacles, with safety
+constraints in regards to temperature that can damage nearby structures.
 
 To demo the environment and visualize the randomized scene try:
 
@@ -9,7 +10,7 @@ python safe_il/envs/bone_drilling_2d.py
 import math
 import Box2D
 from Box2D.Box2D import (
-    b2CircleShape, b2Distance, b2PolygonShape, b2Vec2)
+    b2CircleShape, b2ContactListener, b2Distance, b2PolygonShape, b2Vec2)
 import numpy as np
 
 import gym
@@ -21,12 +22,41 @@ logger = logging.getLogger(__name__)
 
 STATE_H = 64
 STATE_W = 64
-VIEWPORT_W = 512
-VIEWPORT_H = 512
+VIEWPORT_W = 600
+VIEWPORT_H = 600
 FPS = 60
 SCALE = 30.0
+# NOTE(mustafa): The enviornment works on a scaled resolution, 
+# so all positing should be scaled to this. Just normalize everything [0,1]
+# and then multiply by this constant for now, need to look at this closer after
+SCALED_MULTIP = VIEWPORT_H / SCALE
 
 NUM_OBSTACLES = 3
+
+
+class ContactDetector(b2ContactListener):
+    def __init__(self, env):
+        b2ContactListener.__init__(self)
+        self.env = env
+
+    def BeginContact(self, contact):
+        # Check for contact with goal for task completion
+        # NOTE(mustafa): either FixtureA or FixtureB of the contact could
+        # be the the goal/agent, so we have to check everything both ways
+        bodies = [contact.fixtureA.body, contact.fixtureB.body]
+        if self.env.agent in bodies and self.env.goal in bodies:
+            self.env.game_over = True
+
+        # Check contact on bone structures
+
+    def EndContact(self, contact):
+        pass
+
+    def PreSolve(self, contact, oldManifold):
+        pass
+
+    def PostSolve(self, contact, impulse):
+        pass
 
 
 class BoneDrilling2D(gym.Env, EzPickle):
@@ -35,7 +65,7 @@ class BoneDrilling2D(gym.Env, EzPickle):
 
     def __init__(self,
                  pixel_obs=False):
-        self.name = 'Simple Navigation'
+        self.name = 'Bone Drilling'
         self.pixel_obs = pixel_obs
         self.seed()
 
@@ -54,7 +84,8 @@ class BoneDrilling2D(gym.Env, EzPickle):
 
         self.viewer = None
 
-        self.world = Box2D.b2World(gravity=(0, 0), doSleep=True)
+        self.world = Box2D.b2World(gravity=(0, 0))
+
         self.obstacles = []
         self.walls = []
         self.agent_start_pos = (0, 0)
@@ -62,7 +93,7 @@ class BoneDrilling2D(gym.Env, EzPickle):
         self.agent = None
         self.done = None
         self.episode_steps = 0
-        self.horizon = 500
+        self.horizon = 10000
 
         # Reset during initialization
         self.reset()
@@ -77,6 +108,11 @@ class BoneDrilling2D(gym.Env, EzPickle):
         timeStep = 1.0 / 60
         vel_iters, pos_iters = 6, 2
         self.world.Step(timeStep, vel_iters, pos_iters)
+
+        # Necessary to clear forces in Box2D after sim step
+        # TODO(mustafa): Important! The forces might be cleared but velocity
+        # is maintained, need to fix this if its not intended
+        self.world.ClearForces()
 
         self.episode_steps += 1
         self.done = self.episode_steps >= self.horizon
@@ -115,6 +151,11 @@ class BoneDrilling2D(gym.Env, EzPickle):
         # Box2D memory management
         self._destroy()
 
+        # Reset the Box2D Contact Listener
+        self.world.contactListener_keepref = ContactDetector(self)
+        self.world.contactListener = self.world.contactListener_keepref
+        self.game_over = False
+
         # Create and position agent
         self.agent_start_pos = self.np_random.rand(2) if random_start else (2, 2)
         self.agent = self.world.CreateDynamicBody(
@@ -131,15 +172,16 @@ class BoneDrilling2D(gym.Env, EzPickle):
 
         # Generate the obstacles
         for obstacle in range(NUM_OBSTACLES):
-            obs_pos = self.np_random.rand(2) * SCALE / 2
+            obs_pos = self.np_random.rand(2) * SCALED_MULTIP
             new_obstacle = self.world.CreateStaticBody(
                 shapes=b2CircleShape(pos=obs_pos, radius=0.5)
                 )
             new_obstacle.color = (1, 1, 0.5)
             self.obstacles.append(new_obstacle)
 
-        wall_size = [(18, 0.1), (0.1, 18), (18, 0.1), (0.1, 18)]
-        wall_pos = [(0, 0), (0, 0), (0, 17), (17, 0)]
+        wall_size = [(SCALED_MULTIP, 0.1), (0.1, SCALED_MULTIP),
+                     (SCALED_MULTIP, 0.1), (0.1, SCALED_MULTIP)]
+        wall_pos = [(0, 0), (0, 0), (0, SCALED_MULTIP), (SCALED_MULTIP, 0)]
         for size, pos in zip(wall_size, wall_pos):
             new_wall = self.world.CreateStaticBody(
                 shapes=b2PolygonShape(box=size),
@@ -191,6 +233,7 @@ class BoneDrilling2D(gym.Env, EzPickle):
         if not self.agent:
             return
 
+        self.world.contactListener = None
         self.world.DestroyBody(self.agent)
         self.world.DestroyBody(self.goal)
         for ob in self.obstacles:
@@ -205,13 +248,55 @@ class BoneDrilling2D(gym.Env, EzPickle):
         self.goal = None
 
 
-def demo_simple_navigation(env, render=False):
+def demo_bone_drilling_2d(env, render=False, manual_control=False):
+    # Key navigation borrowed from car_racing.py in gym
+    from pyglet.window import key
+
+    a = np.array([0.0, 0.0])
+
+    def key_press(k, mod):
+        global restart
+        if k == 0xFF0D:
+            restart = True
+        if k == key.LEFT:
+            a[0] = -1.0
+        if k == key.RIGHT:
+            a[0] = +1.0
+        if k == key.UP:
+            a[1] = +1.0
+        if k == key.DOWN:
+            a[1] = -1.0
+
+    def key_release(k, mod):
+        if k == key.LEFT and a[0] == -1.0:
+            a[0] = 0
+        if k == key.RIGHT and a[0] == +1.0:
+            a[0] = 0
+        if k == key.UP and a[1] == +1.0:
+            a[1] = 0
+        if k == key.DOWN and a[1] == -1.0:
+            a[1] = 0
+
+    if manual_control:
+        env.render()
+        env.viewer.window.on_key_press = key_press
+        env.viewer.window.on_key_release = key_release
+
+    record_video = False
+    if record_video:
+        from gym.wrappers.monitor import Monitor
+        env = Monitor(env, "/tmp/video-test", force=True)
+
     total_reward = 0
 
     state = env.reset()
     for _ in range(1000):
-        action = env.action_space.sample()
-        state, reward, done, info = env.step((action))
+        if manual_control:
+            action = a
+            print(a)
+        else:
+            action = env.action_space.sample()
+        state, reward, done, info = env.step(action)
         total_reward += reward
 
         if render:
@@ -225,4 +310,6 @@ def demo_simple_navigation(env, render=False):
 
 
 if __name__ == "__main__":
-    demo_simple_navigation(BoneDrilling2D(), render=True)
+    env = gym.make("safe_il:BoneDrilling2D-v0")
+
+    demo_bone_drilling_2d(env, render=True, manual_control=True)
