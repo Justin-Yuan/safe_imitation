@@ -7,11 +7,11 @@ To demo the environment and visualize the randomized scene try:
 python safe_il/envs/bone_drilling_2d.py
 """
 
-from hashlib import new
+import time
 import math
 import Box2D
 from Box2D.Box2D import (
-    b2CircleShape, b2ContactListener, b2Distance, b2PolygonShape, b2Vec2)
+    b2CircleShape, b2ContactFilter, b2ContactListener, b2Distance, b2PolygonShape, b2Vec2)
 import numpy as np
 
 import gym
@@ -33,13 +33,23 @@ SCALE = 30.0
 SCALED_MULTIP = VIEWPORT_H / SCALE
 
 NUM_OBSTACLES = 3
+TEMP_GRID_SIZE = int(SCALED_MULTIP)
+BONE_GRID_SIZE = int(SCALED_MULTIP) - 4
+BONE_CELL_LENGTH = 1
 
 '''
 NOTE(mustafa):
-Currently using a simple grid structure of bones, coming into contact with the 
+Currently using a simple grid structure of bones, coming into contact with the
 bones rigidbody removes that body from the world. Might change to custom
-polygon shapes in the future, allowing for custom geometry that matches the 
+polygon shapes in the future, allowing for custom geometry that matches the
 shape of the drillbit
+
+Temperature is an attribute of the bodies, and is calculated based on distance
+as opposed to the previous idea of using a temperature grid and incrementing
+cells around the heat source. Heat is now measured as a function based on
+distance from the drill's rigid body. This system holds under the assumption
+that everything is surrounded by bone, and heat transfer is constant from the
+source to object
 '''
 
 
@@ -108,6 +118,8 @@ class BoneDrilling2D(gym.Env, EzPickle):
         self.obstacles = []
         self.walls = []
         self.bones = []
+        self.temperature_grid = np.zeros(
+            shape=(TEMP_GRID_SIZE, TEMP_GRID_SIZE), dtype=np.uint8)
         self.agent_start_pos = (0, 0)
         self.goal_pos = (0, 0)
         self.agent = None
@@ -161,6 +173,12 @@ class BoneDrilling2D(gym.Env, EzPickle):
             state.append(abs(distance.pointA[1] - distance.pointB[1]))
             distances.append(distance.distance)
 
+            # Increment the temperature
+            # TODO(mustafa): currently assumes drill always on, also
+            # need to find a correct function here from literature
+            obj.temperature += 0.01 / distance.distance
+            print(obj.temperature)
+
         denom = math.hypot(
             self.agent_start_pos[0] - self.goal_pos[0],
             self.agent_start_pos[1] - self.goal_pos[1],
@@ -183,11 +201,13 @@ class BoneDrilling2D(gym.Env, EzPickle):
         self.game_over = False
 
         # Create and position agent
-        self.agent_start_pos = self.np_random.rand(2) if random_start else (2, 2)
+        self.agent_start_pos = self.np_random.rand(2) if random_start \
+            else (2, 2)
         self.agent = self.world.CreateDynamicBody(
             shapes=b2CircleShape(pos=self.agent_start_pos, radius=0.5)
             )
         self.agent.color = (1, 0, 0)  # Red
+        self.agent.temperature = 0.0
 
         # Create and position goal
         self.goal_pos = self.np_random.rand(2) if random_goal else (15, 15)
@@ -195,6 +215,7 @@ class BoneDrilling2D(gym.Env, EzPickle):
             shapes=b2CircleShape(pos=self.goal_pos, radius=0.5)
         )
         self.goal.color = (0, 1, 0)  # Green
+        self.goal.temperature = 0.0  # Not necessary, but just being consistent
 
         # Generate the obstacles
         for obstacle in range(NUM_OBSTACLES):
@@ -202,7 +223,8 @@ class BoneDrilling2D(gym.Env, EzPickle):
             new_obstacle = self.world.CreateStaticBody(
                 shapes=b2CircleShape(pos=obs_pos, radius=0.5)
                 )
-            new_obstacle.color = (1, 1, 0.5)
+            new_obstacle.color = (0.1, 0.1, 0.1)
+            new_obstacle.temperature = 0.0
             self.obstacles.append(new_obstacle)
 
         wall_size = [(SCALED_MULTIP, 0.1), (0.1, SCALED_MULTIP),
@@ -214,27 +236,30 @@ class BoneDrilling2D(gym.Env, EzPickle):
                 position=pos
             )
             new_wall.color = (0, 0, 0)
+            new_wall.temperature = 0.0  # Also not necessary
             self.walls.append(new_wall)
 
         # Generate the bone structure as a grid
         # NOTE(mustafa): currently using the scaled width of the env
-        GRID_SIZE = int(SCALED_MULTIP) - 5
-        CELL_LENGTH = 0.5
-        for x in range(GRID_SIZE):
-            for y in range(GRID_SIZE):
+        for x in range(BONE_GRID_SIZE):
+            for y in range(BONE_GRID_SIZE):
                 new_bone = self.world.CreateStaticBody(
-                    shapes=b2PolygonShape(box=(CELL_LENGTH, CELL_LENGTH)),
-                    position=((CELL_LENGTH * x) + 4, (CELL_LENGTH * y) + 4),
+                    shapes=b2PolygonShape(
+                        box=(BONE_CELL_LENGTH, BONE_CELL_LENGTH)),
+                    position=((BONE_CELL_LENGTH * x) + 4,
+                              (BONE_CELL_LENGTH * y) + 4),
                     userData=BoneData()
                 )
-                new_bone.color = (0.9, 0.9, 0.5)  # Beige Color
+                new_bone.color = (0.6, 0.6, 0.5)  # Beige Color
+                new_bone.temperature = 0.0
                 self.bones.append(new_bone)
 
         # TODO(mustafa): we might not need a drawlist, all bodies are stored
         # in the world object, but just storing them all explicity for now
 
         # Add all render objects to drawlist to loop over during
-        self.drawlist = [self.agent, self.goal] + self.obstacles + self.walls + self.bones
+        self.drawlist = [self.agent, self.goal] + self.walls + self.bones + \
+            self.obstacles
 
         print('Environment has been reset!')
 
@@ -248,14 +273,19 @@ class BoneDrilling2D(gym.Env, EzPickle):
         for obj in self.drawlist:
             for f in obj.fixtures:
                 trans = f.body.transform
+                # Change the red tone of color based on temperature
+                color = (
+                        np.clip(obj.color[0] + obj.temperature, 0.0, 1.0),
+                        obj.color[1],
+                        obj.color[2])
                 if type(f.shape) is b2CircleShape:
                     t = rendering.Transform(translation=trans * f.shape.pos)
                     self.viewer.draw_circle(
-                        f.shape.radius, 20, color=obj.color
+                        f.shape.radius, 20, color=color
                     ).add_attr(t)
                 else:
                     path = [trans * v for v in f.shape.vertices]
-                    self.viewer.draw_polygon(path, color=obj.color)
+                    self.viewer.draw_polygon(path, color=color)
 
         return self.viewer.render(return_rgb_array=(mode == "rgb_aray"))
 
@@ -339,14 +369,23 @@ def demo_bone_drilling_2d(env, render=False, manual_control=False):
             action = a
         else:
             action = env.action_space.sample()
+        
+        step_t_start = time.time()
         state, reward, done, info = env.step(action)
+        step_t_end = time.time()
         total_reward += reward
 
         if render:
+            render_t_start = time.time()
             env.render()
+            render_t_end = time.time()
 
         if done:
             break
+        
+        if _ % 20 == 0:
+            print(f"Step time: {step_t_end - step_t_start}s")
+            print(f"Render time: {render_t_end - render_t_start}s")
 
     env.close()
     print(total_reward)
