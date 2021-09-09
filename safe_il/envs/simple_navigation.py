@@ -85,30 +85,15 @@ class SimpleNavigation(gym.Env, EzPickle):
         # rgb_array obs will come from render function, will need to rewrite
         # the step/render loop to grab the current screen image
         state = []
-        distances = []
+        for obj in [self.agent] + self.obstacles:
+            state.append(np.array(obj.position.normalized()))
 
-        # for obj in [self.goal] + self.obstacles:
-        #     distance = b2Distance(
-        #         shapeA=self.agent.fixtures[0].shape,
-        #         transformA=self.agent.fixtures[0].body.transform,
-        #         shapeB=obj.fixtures[0].shape,
-        #         transformB=obj.fixtures[0].body.transform
-        #         )
-        #     # Append the X and Y distance seperately
-        #     state.append(abs(distance.pointA[0] - distance.pointB[0]))
-        #     state.append(abs(distance.pointA[1] - distance.pointB[1]))
-        #     distances.append(distance.distance)
+        reward = self.step_reward()
+        cost = self.step_cost()
 
-        # denom = math.hypot(
-        #     self.agent_start_pos[0] - self.goal_pos[0],
-        #     self.agent_start_pos[1] - self.goal_pos[1],
-        #     )
-        # Normalized reward based on distance from goal (and original distance)
-        # TODO(mustafa): This is a slightly wrong, as moving away will case
-        # distance > 1 so not actually normalized. Maybe we use max possible?
-        reward = 0
-
-        return np.array(state, dtype=np.float32), reward, self.done, {}
+        return np.array(state, dtype=np.float32), reward, self.done, {
+            'cost': cost
+        }
 
     def reset(self, random_start=False, random_goal=False):
 
@@ -163,6 +148,7 @@ class SimpleNavigation(gym.Env, EzPickle):
             line_shape = pymunk.Segment(
                 self.space.static_body,
                 wall_points[i][0],
+
                 wall_points[i][1],
                 0.0)
             line_shape.friction = 0.99
@@ -176,6 +162,23 @@ class SimpleNavigation(gym.Env, EzPickle):
         self.drawlist = [self.agent, self.goal] + self.obstacles + self.walls
 
         print('Environment has been reset!')
+
+    def step_reward(self):
+        """
+        Reward function based on distance from goal
+        """
+        reward = np.linalg.norm(
+            np.subtract(self.agent.position.normalized(),
+                        self.goal.position.normalized()))
+        print(reward)
+        return reward
+
+    def step_cost(self):
+        """
+        Cost function that takes into account the distance to the obstacles
+        """
+        cost = 0
+        return cost
 
     def render(self, mode='human'):
         if self.screen is None:
@@ -223,12 +226,40 @@ class SimpleNavigation(gym.Env, EzPickle):
         self.walls = []
 
 
-def demo_simple_navigation(env, render=False):
+def demo_simple_navigation(env, render=False, manual_control=False):
     total_reward = 0
 
     state = env.reset()
-    for _ in range(1000):
-        action = env.action_space.sample()
+    for _ in range(10000):
+        action = [0.0, 0.0]
+        if manual_control:
+            if env.screen is None:
+                pygame.init()
+                env.screen = pygame.display.set_mode((VIEWPORT_W, VIEWPORT_H))
+                env.clock = pygame.time.Clock()
+                env.font = pygame.font.SysFont("Arial", 16)
+                pymunk.pygame_util.positive_y_is_up = True
+                env.options = pymunk.pygame_util.DrawOptions(env.screen)
+            # Capture keyboard events
+            for event in pygame.event.get():
+                if (event.type == pygame.KEYDOWN and
+                        event.key == pygame.K_RIGHT):
+                    action[0] = 1.0
+
+                if (event.type == pygame.KEYDOWN and
+                        event.key == pygame.K_LEFT):
+                    action[0] = -1.0
+
+                if (event.type == pygame.KEYDOWN and
+                        event.key == pygame.K_UP):
+                    action[1] = 1.0
+
+                if (event.type == pygame.KEYDOWN and
+                        event.key == pygame.K_DOWN):
+                    action[1] = -1.0
+        else:
+            # Random action
+            action = env.action_space.sample()
         state, reward, done, info = env.step((action))
         total_reward += reward
 
@@ -244,4 +275,4 @@ def demo_simple_navigation(env, render=False):
 
 if __name__ == "__main__":
     env = gym.make("safe_il:SimpleNavigation-v0")
-    sys.exit(demo_simple_navigation(env, render=True))
+    sys.exit(demo_simple_navigation(env, render=True, manual_control=True))
