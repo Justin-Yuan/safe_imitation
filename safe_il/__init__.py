@@ -10,6 +10,6 @@ register(
 register(
     id='BoneDrilling2D-v0',
     entry_point='safe_il.envs:BoneDrilling2D',
-    max_episode_steps=1000,
+    max_episode_steps=10000,
     reward_threshold=200,
 )

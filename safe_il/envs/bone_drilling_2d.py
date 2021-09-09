@@ -7,8 +7,6 @@ To demo the environment and visualize the randomized scene try:
 python safe_il/envs/bone_drilling_2d.py
 """
 import sys
-import time
-import math
 import pymunk
 import pymunk.autogeometry
 import pymunk.pygame_util
@@ -26,6 +24,7 @@ VIEWPORT_W = 600
 VIEWPORT_H = 600
 FPS = 60
 NUM_OBSTACLES = 3
+RADIUS = 0.02
 
 
 def generate_geometry(surface, space):
@@ -126,15 +125,14 @@ class BoneDrilling2D(gym.Env, EzPickle):
 
         self.episode_steps += 1
 
-        # TODO(mustafa): Currently only returning vector-based obs,
-        # rgb_array obs will come from render function, will need to rewrite
-        # the step/render loop to grab the current screen image
         state = []
-        for obj in [self.agent] + self.obstacles:
-            state.append(np.array(obj.position.normalized()))
+        for obj in [self.agent] + [self.goal] + self.obstacles:
+            x, y = obj.position
+            position = [x / VIEWPORT_W, y / VIEWPORT_W]
+            state.append(position)
 
-        reward = self.step_reward()
-        cost = self.step_cost()
+        reward = self.step_reward(state)
+        cost = self.step_cost(state)
 
         return np.array(state, dtype=np.float32), reward, self.done, {
             'cost': cost
@@ -149,25 +147,25 @@ class BoneDrilling2D(gym.Env, EzPickle):
         self.agent_start_pos = self.np_random.rand(2) if random_start \
             else (0.1, 0.1)
         mass = 1
-        radius = 0.02 * VIEWPORT_H
+        radius = RADIUS * VIEWPORT_H
         moment = pymunk.moment_for_circle(mass, 0, radius)
         self.agent = pymunk.Body(mass, moment)
         self.agent.position = (self.agent_start_pos[0] * VIEWPORT_H,
                                self.agent_start_pos[1] * VIEWPORT_H)
-        self.agent.color = (1, 0, 0)  # Red
         shape = pymunk.Circle(self.agent, radius)
+        shape.color = pygame.Color("black")
         self.space.add(self.agent, shape)
         self.shapes.append(shape)
 
         # Create and position goal using Static Body
         self.goal_pos = self.np_random.rand(2) if random_start \
             else (0.9, 0.9)
-        radius = 0.02 * VIEWPORT_H
+        radius = RADIUS * VIEWPORT_H
         self.goal = pymunk.Body(body_type=pymunk.Body.STATIC)
         self.goal.position = (self.goal_pos[0] * VIEWPORT_H,
                               self.goal_pos[1] * VIEWPORT_H)
-        self.goal.color = (0, 1, 0)  # Green
         shape = pymunk.Circle(self.goal, radius)
+        shape.color = pygame.Color("green")
         self.space.add(self.goal, shape)
         self.shapes.append(shape)
 
@@ -175,19 +173,19 @@ class BoneDrilling2D(gym.Env, EzPickle):
         for i in range(NUM_OBSTACLES):
             obs_pos = self.np_random.rand(2)
             obs_pos = (obs_pos[0] * VIEWPORT_H, obs_pos[1] * VIEWPORT_H)
-            radius = 0.02 * VIEWPORT_H
+            radius = RADIUS * VIEWPORT_H
             new_obstacle = pymunk.Body(body_type=pymunk.Body.STATIC)
             new_obstacle.position = obs_pos
-            new_obstacle.color = (1, 1, 0.5)
             shape = pymunk.Circle(new_obstacle, radius)
+            shape.color = pygame.Color("red")
             self.space.add(new_obstacle, shape)
             self.obstacles.append(new_obstacle)
             self.shapes.append(shape)
 
-        wall_points = [[(1, 1), (1, 599)],
-                       [(1, 1), (599, 1)],
-                       [(1, 599), (599, 599)],
-                       [(599, 1), (599, 599)]]
+        wall_points = [[(1, 1), (1, VIEWPORT_H)],
+                       [(1, 1), (VIEWPORT_W, 1)],
+                       [(1, VIEWPORT_H), (VIEWPORT_W, VIEWPORT_H)],
+                       [(VIEWPORT_W, 1), (VIEWPORT_W, VIEWPORT_H)]]
 
         for i in range(4):
             line_shape = pymunk.Segment(
@@ -199,27 +197,25 @@ class BoneDrilling2D(gym.Env, EzPickle):
             self.walls.append(line_shape)
             self.space.add(line_shape)
 
-        # TODO(mustafa): we might not need a drawlist, all bodies are stored
-        # in the world object, but just storing them all explicity for now
-
-        # Add all render objects to drawlist to loop over during
-        self.drawlist = [self.agent, self.goal] + self.obstacles + self.walls
-
         print('Environment has been reset!')
-    
-    def step_reward(self):
+
+    def step_reward(self, state):
         """
-        Reward function based on distance from goal
+        Reward function based on distance from agent to goal normalized between
+        [0,1] using the maximum possible distance, and taking into account 
+        radius of both bodies
         """
-        reward = np.linalg.norm(
-            np.subtract(self.agent.position.normalized(),
-                        self.goal.position.normalized()))
+        distance = np.linalg.norm(np.subtract(state[0], state[1]))
+        distance = distance - (RADIUS * 2)
+        reward = 1 - (distance / np.linalg.norm(np.subtract([0, 0], [1, 1])))
+        reward = np.clip(reward, 0.0, 1.0)
         print(reward)
         return reward
 
-    def step_cost(self):
+    def step_cost(self, state):
         """
         Cost function that takes into account the distance to the obstacles
+        and their temperatures
         """
         cost = 0
         return cost
@@ -239,6 +235,7 @@ class BoneDrilling2D(gym.Env, EzPickle):
 
         self.screen.fill(pygame.Color("white"))
         self.screen.blit(self.bone, (0, 0))
+
         self.space.debug_draw(self.options)
         pygame.display.flip()
         self.clock.tick(FPS)
