@@ -12,6 +12,6 @@ setup(
         "tensorboard",
         "imageio",
         "pyyaml",
-        "Box2D",
+        "tqdm",
     ],
 )

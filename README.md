@@ -10,13 +10,13 @@ Install via `setup.py` as developer mode. Once pip installed, module import can 
 pip install -e .
 ```
 
-For Gym-Minigrid (Currently Not Used!):
-Install the gym-minigrid dependency and matplotlib prior to setting up the main project
+For Anaconda installation (preferred):
 
 ```bash
-cd dependencies/gym-minigrid
+conda create -n my_env
+conda activate my_env
+conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c conda-forge
 pip install -e .
-pip install matplotlib
 ```
 
 ## Examples
