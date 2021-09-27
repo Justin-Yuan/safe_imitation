@@ -42,3 +42,15 @@ def save_command(output_dir):
     """Logs current executing command to text file."""
     with open(os.path.join(output_dir, 'cmd.txt'), 'a') as file:
         file.write(" ".join(sys.argv) + "\n")
+
+
+def random_sample(indices, batch_size, drop_last=True):
+    """Returns index batches to iterave over"""
+    indices = np.asarray(np.random.permutation(indices))
+    batches = indices[:len(indices) // batch_size * batch_size].reshape(-1, batch_size)
+    for batch in batches:
+        yield batch
+    if not drop_last:
+        r = len(indices) % batch_size
+        if r:
+            yield indices[-r:]
