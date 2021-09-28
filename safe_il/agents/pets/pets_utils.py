@@ -8,9 +8,11 @@ import scipy.stats as stats
 
 from safe_il.utils import random_sample
 
+
 # -----------------------------------------------------------------------------------
 #                   Agent
 # -----------------------------------------------------------------------------------
+
 
 class PETSAgent:
     """Encapsulates ensemble model and sampling-based MPC."""
@@ -267,6 +269,7 @@ class PETSAgent:
 #                   Model
 # -----------------------------------------------------------------------------------
 
+
 class EnsembleModel(nn.Module):
     """Model for a PETS agent."""
 
@@ -350,6 +353,7 @@ class EnsembleModel(nn.Module):
 #                   Storage
 # -----------------------------------------------------------------------------------
 
+
 class PETSBuffer(object):
     """Storage for rollouts during training (for dynamics model).
 
@@ -427,6 +431,7 @@ class PETSBuffer(object):
 #                   Misc
 # -----------------------------------------------------------------------------------
 
+
 def swish(x):
     return x * torch.sigmoid(x)
 
@@ -468,68 +473,3 @@ def get_affine_params2(ensemble_size, in_features, out_features):
     b = nn.Parameter(torch.zeros(ensemble_size, 1, out_features, dtype=torch.float32))
     return w, b
 
-
-# -----------------------------------------------------------------------------------
-#                   Env-specific Hacks
-# -----------------------------------------------------------------------------------
-
-
-def cartpole_cost_func(obs, act, info):
-    """Per-step cost function for cartpole env.
-    
-    `obs`, `act` both have shape (*, O or A).
-    `info` is a single dict for thet current time step.
-    """
-    x, theta = obs[:, 0], obs[:, 2]
-    length = info["pendulum_length"]
-    # shape (*, 2)
-    ee_pos = torch.stack([x + length * torch.sin(theta), length * torch.cos(theta)], -1)
-    goal_pos = torch.as_tensor([0.0, length])
-    # shape (*,)
-    cost = -torch.exp(-torch.sum(torch.square(ee_pos - goal_pos) * torch.FloatTensor([1.0, 1.0]), -1) / length**2)
-    # cost += 0.01 * torch.sum(torch.square(act), -1)
-    # cost += 0.0001 * torch.sum(torch.square(act), -1)
-    return cost
-
-
-def cartpole_cost_info_func(info, env):
-    """Per-step function to augment info dict for cost func.
-    """
-    info["pendulum_length"] = env.OVERRIDDEN_EFFECTIVE_POLE_LENGTH
-    return info
-
-
-def quadrotor_cost_func(obs, act, info):
-    """Per-step cost function for quadrotor env."""
-    if obs.shape[-1] == 2:
-        z = obs[:, 0]
-        z_goal = torch.as_tensor(info["goal"][1])
-        cost = (z - z_goal)**2
-    elif obs.shape[-1] == 6:
-        x, z = obs[:, 0], obs[:, 2]
-        x_goal = torch.as_tensor(info["goal"][0])
-        z_goal = torch.as_tensor(info["goal"][1])
-        cost = (x - x_goal)**2 + (z - z_goal)**2
-    else:
-        raise NotImplementedError
-    # cost += 0.01 * torch.sum(torch.square(act), -1)
-    return cost
-
-
-def quadrotor_cost_info_func(info, env):
-    """Per-step function to augment info dict for cost func.
-    """
-    info["goal"] = env.TASK_INFO["stabilization_goal"]
-    return info
-
-
-ENV_COST_FUNCS = {
-    "cartpole": {
-        "cost_func": cartpole_cost_func,
-        "cost_info_func": cartpole_cost_info_func,
-    },
-    "quadrotor": {
-        "cost_func": quadrotor_cost_func,
-        "cost_info_func": quadrotor_cost_info_func,
-    },
-}

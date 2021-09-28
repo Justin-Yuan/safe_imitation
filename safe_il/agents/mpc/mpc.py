@@ -10,7 +10,7 @@ from torch.nn import functional as F
 from munch import munchify
 
 from safe_il.utils import set_manual_seed
-from safe_il.pets.mpc_utils import MPCAgent
+from safe_il.agents.mpc.mpc_utils import MPCAgent
 
 
 # -----------------------------------------------------------------------------------
@@ -18,26 +18,26 @@ from safe_il.pets.mpc_utils import MPCAgent
 # -----------------------------------------------------------------------------------
 
 
-class MPC
+class MPC:
     """CEM-based MPC."""
 
     def __init__(
         self, 
         env, 
-        eval_env=None,
-        training=True, 
-        checkpoint_path="model_latest.pt", 
         output_dir="temp", 
         device="cpu", 
         seed=None, 
         # custom args 
         horizon=10,
-        cem={}
+        cem={
+            "pop_size": 400,
+            "num_elites": 40,
+            "max_iters": 5,
+            "alpha": 0.1  
+        },
         **kwargs
     ):
         # bookkeeping  
-        self.training = training
-        self.checkpoint_path = checkpoint_path
         self.output_dir = output_dir
         self.device = device
         self.seed = seed 
@@ -47,7 +47,6 @@ class MPC
         
         # task
         self.env = env
-        self.eval_env = eval_env 
 
         # agent
         self.agent = MPCAgent(self.env.observation_space,

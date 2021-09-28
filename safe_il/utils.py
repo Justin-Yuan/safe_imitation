@@ -54,3 +54,42 @@ def random_sample(indices, batch_size, drop_last=True):
         r = len(indices) % batch_size
         if r:
             yield indices[-r:]
+
+
+def get_random_state():
+    """Snapshots the random state at any moment."""
+    return {
+        "random": random.getstate(),
+        "numpy": np.random.get_state(),
+        "torch": torch.get_rng_state()
+    }
+
+
+def set_random_state(state_dict):
+    """Resets the random state for experiment restore."""
+    random.setstate(state_dict["random"])
+    np.random.set_state(state_dict["numpy"])
+    torch.torch.set_rng_state(state_dict["torch"])
+    
+
+def unwrap_wrapper(env, wrapper_class):
+    """Retrieve a ``VecEnvWrapper`` object by recursively searching.
+
+    Reference:
+        * https://github.com/DLR-RM/stable-baselines3/blob/ddbe0e93f9fe55152f2354afd058b28e6ccc3345/stable_baselines3/common/env_util.py
+    """
+    env_tmp = env
+    while isinstance(env_tmp, gym.Wrapper):
+        if isinstance(env_tmp, wrapper_class):
+            return env_tmp
+        env_tmp = env_tmp.env
+    return None
+
+
+def is_wrapped(env, wrapper_class):
+    """Check if a given environment has been wrapped with a given wrapper.
+
+    Reference:
+        * https://github.com/DLR-RM/stable-baselines3/blob/ddbe0e93f9fe55152f2354afd058b28e6ccc3345/stable_baselines3/common/env_util.py
+    """
+    return unwrap_wrapper(env, wrapper_class) is not None

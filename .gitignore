@@ -1,12 +1,14 @@
 # Project related
 logs/
 data/
+*archived/
+results/
+configs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-*archived/
 
 # C extensions
 *.so
