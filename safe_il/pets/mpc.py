@@ -13,6 +13,11 @@ from safe_il.utils import set_manual_seed
 from safe_il.pets.mpc_utils import MPCAgent
 
 
+# -----------------------------------------------------------------------------------
+#                   Algo
+# -----------------------------------------------------------------------------------
+
+
 class MPC
     """CEM-based MPC."""
 
@@ -25,14 +30,20 @@ class MPC
         output_dir="temp", 
         device="cpu", 
         seed=None, 
+        # custom args 
+        horizon=10,
+        cem={}
         **kwargs
     ):
-        # common args 
+        # bookkeeping  
         self.training = training
         self.checkpoint_path = checkpoint_path
         self.output_dir = output_dir
         self.device = device
         self.seed = seed 
+        
+        self.horizon = horizon
+        self.cem = cem
         
         # task
         self.env = env
