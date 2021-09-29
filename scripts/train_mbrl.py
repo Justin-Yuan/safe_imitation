@@ -1,4 +1,17 @@
 """Vanilla training script for model-based rl methods (mpc, pets).
+
+Example: 
+    To train PETS on cartpole:: 
+
+        $ python scripts/train_mbrl.py --algo pets --env cartpole --config configs/mbrl/pets_cartpole.yaml --tag pets_cartpole --device cuda --seed 1
+
+    To test trained model::
+    
+        $ python scripts/train_mbrl.py --func test --restore <path to trained folder>
+    
+Todo:
+    *
+
 """
 import os
 import sys
@@ -100,7 +113,7 @@ def test(config):
         agent.load(os.path.join(config.restore, "model_latest.pt"))
 
     # Test agent
-    results = agent.run(n_episodes=config.algo_config.eval_batch_size, render=config.render, verbose=config.verbose)
+    results = agent.run(n_episodes=config.n_episodes, render=config.render, verbose=config.verbose)
     agent.close()
 
     # Save evalution results
@@ -136,6 +149,7 @@ if __name__ == "__main__":
     fac.add_argument("--verbose", action="store_true", help="if to print states & actions in policy test.")
     fac.add_argument("--eval_output_path", type=str, default="test_results.pkl", help="file path to save evaluation results.")
     fac.add_argument("--set_test_seed", action="store_true", help="if to set seed when testing policy.")
+    fac.add_argument("--n_episodes", type=int, default=10, help="number of test episodes.")
     config = fac.merge()
 
     # system settings

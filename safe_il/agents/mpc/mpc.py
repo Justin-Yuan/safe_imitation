@@ -26,7 +26,7 @@ class MPC:
         device="cpu", 
         seed=None, 
         # custom args 
-        horizon=10,
+        horizon=25,
         cem={
             "pop_size": 400,
             "num_elites": 40,

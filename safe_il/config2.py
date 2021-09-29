@@ -22,6 +22,8 @@ class ConfigFactory:
             device="cpu",
             output_dir="results",
             restore=None,
+            algo_config={},
+            env_config={},
         )
 
     def add_argument(self, *args, **kwargs):
