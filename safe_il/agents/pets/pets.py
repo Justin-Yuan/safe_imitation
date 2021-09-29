@@ -22,7 +22,7 @@ import torch
 from torch import nn as nn
 from torch.nn import functional as F
 
-from safe_il.logging import ExperimentLogger
+from safe_il.logger import ExperimentLogger
 from safe_il.utils import get_random_state, set_random_state, is_wrapped
 from safe_il.envs.record_episode_statistics import RecordEpisodeStatistics
 from safe_il.agents.pets.pets_utils import PETSAgent, PETSBuffer

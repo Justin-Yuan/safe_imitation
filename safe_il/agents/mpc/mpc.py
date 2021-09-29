@@ -127,7 +127,7 @@ def test_mpc_cartpole():
 
     config = {
         "seed": 1234,
-        "task_config": {
+        "env_config": {
             "normalized_action": True,
         }, 
         "algo_config": {
@@ -145,7 +145,7 @@ def test_mpc_cartpole():
     set_manual_seed(config.seed)
     
     # Create task/env
-    env = CartPole(**config.task_config)
+    env = CartPole(**config.env_config)
     env.seed(config.seed)
 
     # Create the controller/control_agent.
@@ -173,13 +173,13 @@ def test_cartpole_dynamics_deviation():
 
     config = {
         "seed": 1234,
-        "task_config": {
+        "env_config": {
             "normalized_action": True,
         }, 
     }
     config = munchify(config)
     
-    env = CartPole(**config.task_config)
+    env = CartPole(**config.env_config)
     env.seed(config.seed)
 
     obs, info = env.reset()
