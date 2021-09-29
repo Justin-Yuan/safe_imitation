@@ -10,6 +10,8 @@ setup(
         "matplotlib",
         "munch",
         "numpy",
+        "pygame",
+        "pymunk",
         "pyyaml",
         "tensorboard",
         "torch",

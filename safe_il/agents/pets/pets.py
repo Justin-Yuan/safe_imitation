@@ -371,9 +371,8 @@ class PETS:
                 if explore:
                     action = self.env.action_space.sample()
                 else:
-                    cost_info = self.env_cost_info_func(info, self.env)
                     with torch.no_grad():
-                        action = self.agent.act(obs, t, cost_info)
+                        action = self.agent.act(obs, t, info)
                 action = action.reshape(act_dim)
 
                 obs, rew, done, info = self.env.step(action)
@@ -435,6 +434,8 @@ class PETS:
 def test_pets_cartpole():
     """Run the (trained) policy/controller for evaluation.
     """
+    from munch import munchify
+    from safe_il.utils import set_manual_seed
     from safe_il.envs.cartpole import CartPole
 
     config = {
@@ -461,7 +462,7 @@ def test_pets_cartpole():
     env.seed(config.seed)
 
     # Create the controller/control_agent.
-    agent = MPC(env, seed=config.seed, device="cuda", **config.algo_config)
+    agent = PETS(env, seed=config.seed, device="cuda", **config.algo_config)
     agent.reset()
 
     # Test controller
@@ -481,6 +482,7 @@ def test_cartpole_dynamics_deviation():
     """Difference between analytical dynamics model and ground truth model.
     """
     import matplotlib.pyplot as plt
+    from munch import munchify
     from safe_il.envs.cartpole import CartPole
 
     config = {
@@ -520,5 +522,5 @@ def test_cartpole_dynamics_deviation():
 
 
 if __name__ == "__main__":
-    test_mpc_cartpole()
+    test_pets_cartpole()
     # test_cartpole_dynamics_deviation()

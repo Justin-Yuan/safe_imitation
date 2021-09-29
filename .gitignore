@@ -4,6 +4,7 @@ data/
 *archived/
 results/
 configs/
+figures/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

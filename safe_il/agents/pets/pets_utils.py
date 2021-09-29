@@ -7,7 +7,7 @@ from torch.nn import functional as F
 import scipy.stats as stats
 
 from safe_il.utils import random_sample
-
+from safe_il.agents.mpc.mpc_utils import CEMOptimizer
 
 # -----------------------------------------------------------------------------------
 #                   Agent

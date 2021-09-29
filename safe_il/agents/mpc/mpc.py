@@ -7,9 +7,7 @@ import numpy as np
 import torch
 from torch import nn as nn
 from torch.nn import functional as F
-from munch import munchify
 
-from safe_il.utils import set_manual_seed
 from safe_il.agents.mpc.mpc_utils import MPCAgent
 
 
@@ -64,8 +62,6 @@ class MPC:
     def close(self):
         """Shuts down and cleans up lingering resources."""
         self.env.close()
-        if self.eval_env is not None:
-            self.eval_env.close()
 
     def run(self, env=None, render=False, n_episodes=10, verbose=False, **kwargs):
         """Runs evaluation with current policy."""
@@ -123,10 +119,12 @@ class MPC:
 def test_mpc_cartpole():
     """Run the (trained) policy/controller for evaluation.
     """
+    from munch import munchify
+    from safe_il.utils import set_manual_seed
     from safe_il.envs.cartpole import CartPole
 
     config = {
-        "seed": 1234,
+        "seed": 123,
         "env_config": {
             "normalized_action": True,
         }, 
@@ -169,6 +167,7 @@ def test_cartpole_dynamics_deviation():
     """Difference between analytical dynamics model and ground truth model.
     """
     import matplotlib.pyplot as plt
+    from munch import munchify
     from safe_il.envs.cartpole import CartPole
 
     config = {

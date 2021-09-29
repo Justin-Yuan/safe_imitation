@@ -45,10 +45,10 @@ class CartPole(gym.Env):
         self.observation_space = spaces.Box(-high, high, dtype=np.float32)
 
         if self.normalized_action:
-            self.action_space = spaces.Box(-1, 1, dtype=np.float32)
+            self.action_space = spaces.Box(-1, 1, shape=(1,), dtype=np.float32)
             self.action_scale = self.force_mag
         else:
-            self.action_space = spaces.Box(-self.force_mag, self.force_mag, dtype=np.float32)
+            self.action_space = spaces.Box(-self.force_mag, self.force_mag, shape=(1,), dtype=np.float32)
             self.action_scale = 1
         self.preprocess_action = lambda a: np.clip(
             a, self.action_space.low, self.action_space.high
@@ -69,9 +69,6 @@ class CartPole(gym.Env):
         return np.array(self.state, dtype=np.float32), {}
 
     def step(self, action):
-        err_msg = "%r (%s) invalid" % (action, type(action))
-        assert self.action_space.contains(action), err_msg
-
         x, x_dot, theta, theta_dot = self.state
         force = float(self.preprocess_action(action))
         costheta = math.cos(theta)
@@ -107,6 +104,10 @@ class CartPole(gym.Env):
             or theta < -self.theta_threshold_radians
             or theta > self.theta_threshold_radians
         )
+        if not done:
+            reward = 1.0
+        else:
+            reward = 0.0
         info = {}
         
         # early termination due to time limit 
@@ -115,11 +116,6 @@ class CartPole(gym.Env):
             info["TimeLimit.truncated"] = True 
         done = done or max_steps_reached
             
-        if not done:
-            reward = 1.0
-        else:
-            reward = 0.0
-
         return np.array(self.state, dtype=np.float32), reward, done, info
 
     def render(self, mode="human"):
