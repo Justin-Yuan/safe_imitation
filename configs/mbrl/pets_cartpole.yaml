@@ -1,0 +1,41 @@
+algo_config:
+  # model args
+  hidden_dim: 500
+  weight_decays:
+    - 1.e-4
+    - 2.5e-4
+    - 2.5e-4
+    - 5.e-4
+  ensemble_size: 5
+  lr: 0.001
+  epochs: 5
+  batch_size: 32
+  horizon: 25
+  num_particles: 20
+
+  # mpc planning optimizer args
+  cem:
+    pop_size: 400
+    num_elites: 40
+    max_iters: 5
+    alpha: 0.1
+
+  # runner args
+  init_rollouts: 1
+  init_steps: 0
+  train_iters: 50
+  rollouts_per_iter: 1
+  steps_per_iter: 0
+  deque_size: 10
+  eval_batch_size: 10
+
+  # misc
+  log_interval: 1
+  save_interval: 1
+  num_checkpoints: 5
+  eval_interval: 0
+  eval_save_best: True
+  tensorboard: True
+
+env_config:
+  normalized_action: True 

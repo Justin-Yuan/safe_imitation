@@ -3,7 +3,7 @@ logs/
 data/
 *archived/
 results/
-configs/
+# configs/
 figures/
 
 # Byte-compiled / optimized / DLL files
