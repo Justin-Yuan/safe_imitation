@@ -24,6 +24,9 @@ VIEWPORT_W = 600
 VIEWPORT_H = 600
 FPS = 60
 NUM_OBSTACLES = 3
+AGENT_START_LOCATION = (0.1, 0.1)
+GOAL_LOCATION = (0.9, 0.9)
+OBSTACLES = [(0.3, 0.2), (0.8, 0.2), (0.4, 0.7)]
 RADIUS = 0.02
 
 
@@ -75,11 +78,8 @@ class BoneDrilling2D(gym.Env, EzPickle):
             self.observation_space = spaces.Box(
                 0, 255, shape=(VIEWPORT_W, VIEWPORT_H, 3), dtype=np.uint8)
         else:
-            # For vector-based observation of the state, we measure the
-            # distance to each obstacle and the goal. We also measure the
-            # temperature of the obstacles.
-            # [X & Y distance for each obstacle, X & Y for goal, Temp for each]
-            num_obs = (NUM_OBSTACLES * 2) + 2 + NUM_OBSTACLES
+            # TODO(mustafa): Need to add temperatures somewhere here
+            num_obs = (NUM_OBSTACLES + 2) * 2
             self.observation_space = spaces.Box(
                 -np.inf, np.inf, shape=(num_obs,),
                 dtype=np.float32)
@@ -138,14 +138,15 @@ class BoneDrilling2D(gym.Env, EzPickle):
             'cost': cost
         }
 
-    def reset(self, random_start=False, random_goal=False):
+    def reset(self, random_start=False, random_goal=False,
+              random_obstacles=False):
 
         # Memory Management
         self._destroy()
 
         # Create and position agent using Dynamic Body
         self.agent_start_pos = self.np_random.rand(2) if random_start \
-            else (0.1, 0.1)
+            else AGENT_START_LOCATION
         mass = 1
         radius = RADIUS * VIEWPORT_H
         moment = pymunk.moment_for_circle(mass, 0, radius)
@@ -159,7 +160,7 @@ class BoneDrilling2D(gym.Env, EzPickle):
 
         # Create and position goal using Static Body
         self.goal_pos = self.np_random.rand(2) if random_start \
-            else (0.9, 0.9)
+            else GOAL_LOCATION
         radius = RADIUS * VIEWPORT_H
         self.goal = pymunk.Body(body_type=pymunk.Body.STATIC)
         self.goal.position = (self.goal_pos[0] * VIEWPORT_H,
@@ -171,7 +172,8 @@ class BoneDrilling2D(gym.Env, EzPickle):
 
         # Generate the obstacles using Static Bodies
         for i in range(NUM_OBSTACLES):
-            obs_pos = self.np_random.rand(2)
+            obs_pos = self.np_random.rand(2) if random_obstacles \
+                else GOAL_LOCATION
             obs_pos = (obs_pos[0] * VIEWPORT_H, obs_pos[1] * VIEWPORT_H)
             radius = RADIUS * VIEWPORT_H
             new_obstacle = pymunk.Body(body_type=pymunk.Body.STATIC)
@@ -202,7 +204,7 @@ class BoneDrilling2D(gym.Env, EzPickle):
     def step_reward(self, state):
         """
         Reward function based on distance from agent to goal normalized between
-        [0,1] using the maximum possible distance, and taking into account 
+        [0,1] using the maximum possible distance, and taking into account
         radius of both bodies
         """
         distance = np.linalg.norm(np.subtract(state[0], state[1]))
@@ -218,16 +220,17 @@ class BoneDrilling2D(gym.Env, EzPickle):
         and their temperatures
         """
         cost = 0
+        for i in range(len(self.obstacles)):
+            distance = np.linalg.norm(np.subtract(state[0], state[i + 2]))
+            distance = distance - (RADIUS * 2)
+            reward = 1 - \
+                (distance / np.linalg.norm(np.subtract([0, 0], [1, 1])))
+            reward = np.clip(reward, 0.0, 1.0)
         return cost
 
     def render(self, mode='human'):
         if self.screen is None:
-            pygame.init()
-            self.screen = pygame.display.set_mode((VIEWPORT_W, VIEWPORT_H))
-            self.clock = pygame.time.Clock()
-            self.font = pygame.font.SysFont("Arial", 16)
-            pymunk.pygame_util.positive_y_is_up = False
-            self.options = pymunk.pygame_util.DrawOptions(self.screen)
+            self._init_screen()
 
         if self.bone is None:
             self.bone = pygame.Surface((600, 600))
@@ -271,6 +274,14 @@ class BoneDrilling2D(gym.Env, EzPickle):
         self.shapes = []
         self.walls = []
 
+    def _init_screen(self):
+        pygame.init()
+        self.screen = pygame.display.set_mode((VIEWPORT_W, VIEWPORT_H))
+        self.clock = pygame.time.Clock()
+        self.font = pygame.font.SysFont("Arial", 16)
+        pymunk.pygame_util.positive_y_is_up = False
+        self.options = pymunk.pygame_util.DrawOptions(self.screen)
+
 
 def demo_bone_drilling_2d(env, render=False, manual_control=False):
     total_reward = 0
@@ -280,12 +291,7 @@ def demo_bone_drilling_2d(env, render=False, manual_control=False):
         action = [0.0, 0.0]
         if manual_control:
             if env.screen is None:
-                pygame.init()
-                env.screen = pygame.display.set_mode((VIEWPORT_W, VIEWPORT_H))
-                env.clock = pygame.time.Clock()
-                env.font = pygame.font.SysFont("Arial", 16)
-                pymunk.pygame_util.positive_y_is_up = True
-                env.options = pymunk.pygame_util.DrawOptions(env.screen)
+                env._init_screen()
             # Capture keyboard events
             for event in pygame.event.get():
                 if (event.type == pygame.KEYDOWN and

@@ -23,8 +23,8 @@ def plot(args):
 
 
     states = []
-    x_segments = 10
-    y_segments = 10
+    x_segments = 100
+    y_segments = 100
 
     # TODO(mustafa): Use meshgrid?
     for x in np.linspace(0, 1, x_segments):
@@ -45,13 +45,16 @@ def plot(args):
 
     print(pred)
     plt.gca().add_patch(
-        Circle((3, 2), radius=0.2, color='r')
+        Circle((30, 20), radius=2, color='r')
     )
     plt.gca().add_patch(
-        Circle((8, 2), 0.2,  color='r')
+        Circle((80, 20), 2,  color='r')
     )
     plt.gca().add_patch(
-        Circle((4, 7), 0.2,  color='r')
+        Circle((40, 70), 2,  color='r')
+    )
+    plt.gca().add_patch(
+        Circle((90, 90), 2,  color='g')
     )
     plt.imshow(pred.T)
     filepath = os.path.join(args.log_dir, args.filename)

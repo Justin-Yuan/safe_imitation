@@ -195,17 +195,18 @@ class SimpleNavigation(gym.Env, EzPickle):
         Cost function that takes into account the distance to the obstacles
         and their temperatures
         """
+        #TODO: Fix distances, look at closest ball
         total_cost = 0
         agent = np.array([state[0], state[1]])
         for i in range(len(self.obstacles)):
-            obstacle = np.array([state[4 + (i * 2)], state[2 + (i * 2) + 1]])
+            obstacle = np.array([state[4 + (i * 2)], state[4 + (i * 2) + 1]])
             distance = np.linalg.norm(np.subtract(agent, obstacle))
             distance = distance - (RADIUS * 2)
             cost = 1 - \
                 (distance / np.linalg.norm(np.subtract([0, 0], [1, 1])))
             cost = np.clip(cost, 0.0, 1.0)
             total_cost += cost
-        return cost
+        return total_cost
 
     def render(self, mode='human'):
         if self.screen is None:
