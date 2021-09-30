@@ -4,14 +4,17 @@ setup(
     name="safe_il",
     version="0.0.1",
     install_requires=[
-        "numpy",
-        "matplotlib",
-        "torch",
+        "dict-deep",
         "gym",
-        "torch",
-        "tensorboard",
         "imageio",
+        "matplotlib",
+        "munch",
+        "numpy",
+        "pygame",
+        "pymunk",
         "pyyaml",
-        "tqdm",
+        "tensorboard",
+        "torch",
+        "tqdm"
     ],
 )
