@@ -13,6 +13,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+# Get activation from PyTorch Functional
+def get_activation(name):
+    return getattr(F, name) if name else lambda x: x
+
+
 # Initialize Policy weights
 def weights_init_(m):
     if isinstance(m, nn.Linear):
@@ -23,21 +28,50 @@ def weights_init_(m):
 class QSafeNetwork(nn.Module):
     '''
     Safety-Q network
+
+    Arguments:
+        input_dim (int): input dimension
+        action_dim (int): action space dimension
+        hidden_dim (int): hidden layer dimension
+        act (str): activation function to use
+        output_act (str): activation function for output
+        num_layers (int): number of hidden layers
+        use_dropout (bool): enable dropout
+        init_weights (bool): enable initialization of weights using Xavier
     '''
-    def __init__(self, num_inputs, num_actions, hidden_dim):
+    def __init__(self,
+                 input_dim,
+                 output_dim,
+                 hidden_dim,
+                 act='leaky_relu',
+                 output_act=None,
+                 num_layers=2,
+                 use_dropout=False,
+                 init_weights=True):
+
         super(QSafeNetwork, self).__init__()
 
-        self.linear1 = nn.Linear(num_inputs + num_actions, hidden_dim)
-        self.linear2 = nn.Linear(hidden_dim, hidden_dim)
-        self.linear3 = nn.Linear(hidden_dim, 1)
+        dims = [input_dim] + ([hidden_dim] * num_layers) + [output_dim]
+        self.linears = nn.ModuleList(
+            [nn.Linear(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
+        )
 
-        self.apply(weights_init_)
+        self.use_dropout = use_dropout
+        self.act = get_activation(act)
+        self.output_act = get_activation(act)
+        if init_weights:
+            self.apply(weights_init_)
 
-    def forward(self, state, action):
-        inp = torch.cat([state, action], 1)
+    def forward(self, input):
 
-        out = F.relu(self.linear1(inp))
-        out = F.relu(self.linear2(out))
-        out = self.linear3(out)
+        out = input
+
+        for lin in self.linears[:-1]:
+            out = self.act(lin(out))
+
+        if self.use_dropout:
+            out = F.dropout(out)
+
+        out = self.output_act(self.linears[-1](out))
 
         return out
