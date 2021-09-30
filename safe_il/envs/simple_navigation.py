@@ -11,6 +11,7 @@ import pymunk
 import pymunk.pygame_util
 import pygame
 import numpy as np
+import time
 
 import gym
 from gym import spaces
@@ -23,6 +24,10 @@ VIEWPORT_W = 600
 VIEWPORT_H = 600
 FPS = 60
 NUM_OBSTACLES = 3
+AGENT_START_LOCATION = (0.1, 0.1)
+GOAL_LOCATION = (0.9, 0.9)
+OBSTACLES = [(0.3, 0.2), (0.8, 0.2), (0.4, 0.7)]
+RADIUS = 0.02
 
 
 class SimpleNavigation(gym.Env, EzPickle):
@@ -85,64 +90,70 @@ class SimpleNavigation(gym.Env, EzPickle):
         # rgb_array obs will come from render function, will need to rewrite
         # the step/render loop to grab the current screen image
         state = []
-        for obj in [self.agent] + self.obstacles:
-            state.append(np.array(obj.position.normalized()))
+        for obj in [self.agent] + [self.goal] + self.obstacles:
+            x, y = obj.position
+            normalized_x = x / VIEWPORT_W
+            normalized_y = y / VIEWPORT_W
+            state.append(normalized_x)
+            state.append(normalized_y)
 
-        reward = self.step_reward()
-        cost = self.step_cost()
+        reward = self.step_reward(state)
+        cost = self.step_cost(state)
 
         return np.array(state, dtype=np.float32), reward, self.done, {
             'cost': cost
         }
 
-    def reset(self, random_start=False, random_goal=False):
+    def reset(self, random_start=False, random_goal=False,
+              random_obstacles=False):
 
         # Memory Management
         self._destroy()
 
         # Create and position agent using Dynamic Body
         self.agent_start_pos = self.np_random.rand(2) if random_start \
-            else (0.1, 0.1)
+            else AGENT_START_LOCATION
         mass = 1
-        radius = 0.02 * VIEWPORT_H
+        radius = RADIUS * VIEWPORT_H
         moment = pymunk.moment_for_circle(mass, 0, radius)
         self.agent = pymunk.Body(mass, moment)
         self.agent.position = (self.agent_start_pos[0] * VIEWPORT_H,
                                self.agent_start_pos[1] * VIEWPORT_H)
-        self.agent.color = (1, 0, 0)  # Red
         shape = pymunk.Circle(self.agent, radius)
+        shape.color = pygame.Color("black")
         self.space.add(self.agent, shape)
         self.shapes.append(shape)
 
         # Create and position goal using Static Body
-        self.goal_pos = self.np_random.rand(2) if random_start \
-            else (0.9, 0.9)
-        radius = 0.02 * VIEWPORT_H
+        self.goal_pos = self.np_random.rand(2) if random_goal \
+            else GOAL_LOCATION
+        radius = RADIUS * VIEWPORT_H
         self.goal = pymunk.Body(body_type=pymunk.Body.STATIC)
         self.goal.position = (self.goal_pos[0] * VIEWPORT_H,
                               self.goal_pos[1] * VIEWPORT_H)
-        self.goal.color = (0, 1, 0)  # Green
         shape = pymunk.Circle(self.goal, radius)
+        shape.color = pygame.Color("green")
         self.space.add(self.goal, shape)
         self.shapes.append(shape)
 
         # Generate the obstacles using Static Bodies
         for i in range(NUM_OBSTACLES):
-            obs_pos = self.np_random.rand(2)
+            obs_pos = self.np_random.rand(2) if random_obstacles \
+                else OBSTACLES[i]
             obs_pos = (obs_pos[0] * VIEWPORT_H, obs_pos[1] * VIEWPORT_H)
-            radius = 0.02 * VIEWPORT_H
+            radius = RADIUS * VIEWPORT_H
             new_obstacle = pymunk.Body(body_type=pymunk.Body.STATIC)
             new_obstacle.position = obs_pos
-            new_obstacle.color = (1, 1, 0.5)
             shape = pymunk.Circle(new_obstacle, radius)
+            shape.color = pygame.Color("red")
             self.space.add(new_obstacle, shape)
             self.obstacles.append(new_obstacle)
             self.shapes.append(shape)
 
-        wall_points = [[(1, 1), (1, 599)],
-                       [(1, 1), (599, 1)],
-                       [(1, 599), (599, 599)],
-                       [(599, 1), (599, 599)]]
+        wall_points = [[(1, 1), (1, VIEWPORT_H)],
+                       [(1, 1), (VIEWPORT_W, 1)],
+                       [(1, VIEWPORT_H), (VIEWPORT_W, VIEWPORT_H)],
+                       [(VIEWPORT_W, 1), (VIEWPORT_W, VIEWPORT_H)]]
 
         for i in range(4):
             line_shape = pymunk.Segment(
@@ -155,39 +166,50 @@ class SimpleNavigation(gym.Env, EzPickle):
             self.walls.append(line_shape)
             self.space.add(line_shape)
 
-        # TODO(mustafa): we might not need a drawlist, all bodies are stored
-        # in the world object, but just storing them all explicity for now
+        state = []
+        for obj in [self.agent] + [self.goal] + self.obstacles:
+            x, y = obj.position
+            normalized_x = x / VIEWPORT_W
+            normalized_y = y / VIEWPORT_W
+            state.append(normalized_x)
+            state.append(normalized_y)
 
-        # Add all render objects to drawlist to loop over during
-        self.drawlist = [self.agent, self.goal] + self.obstacles + self.walls
+        return state
 
-        print('Environment has been reset!')
-
-    def step_reward(self):
+    def step_reward(self, state):
         """
-        Reward function based on distance from goal
+        Reward function based on distance from agent to goal normalized between
+        [0,1] using the maximum possible distance, and taking into account
+        radius of both bodies
         """
-        reward = np.linalg.norm(
-            np.subtract(self.agent.position.normalized(),
-                        self.goal.position.normalized()))
-        print(reward)
+        agent = np.array([state[0], state[1]])
+        goal = np.array([state[2], state[3]])
+        distance = np.linalg.norm(np.subtract(agent, goal))
+        distance = distance - (RADIUS * 2)
+        reward = 1 - (distance / np.linalg.norm(np.subtract([0, 0], [1, 1])))
+        reward = np.clip(reward, 0.0, 1.0)
         return reward
 
-    def step_cost(self):
+    def step_cost(self, state):
         """
         Cost function that takes into account the distance to the obstacles
+        and their temperatures
         """
-        cost = 0
+        total_cost = 0
+        agent = np.array([state[0], state[1]])
+        for i in range(len(self.obstacles)):
+            obstacle = np.array([state[4 + (i * 2)], state[2 + (i * 2) + 1]])
+            distance = np.linalg.norm(np.subtract(agent, obstacle))
+            distance = distance - (RADIUS * 2)
+            cost = 1 - \
+                (distance / np.linalg.norm(np.subtract([0, 0], [1, 1])))
+            cost = np.clip(cost, 0.0, 1.0)
+            total_cost += cost
         return cost
 
     def render(self, mode='human'):
         if self.screen is None:
-            pygame.init()
-            self.screen = pygame.display.set_mode((VIEWPORT_W, VIEWPORT_H))
-            self.clock = pygame.time.Clock()
-            self.font = pygame.font.SysFont("Arial", 16)
-            pymunk.pygame_util.positive_y_is_up = True
-            self.options = pymunk.pygame_util.DrawOptions(self.screen)
+            self._init_screen()
 
         self.screen.fill(pygame.Color("white"))
         self.space.debug_draw(self.options)
@@ -224,6 +246,15 @@ class SimpleNavigation(gym.Env, EzPickle):
 
         self.shapes = []
         self.walls = []
+        self.obstacles = []
+
+    def _init_screen(self):
+        pygame.init()
+        self.screen = pygame.display.set_mode((VIEWPORT_W, VIEWPORT_H))
+        self.clock = pygame.time.Clock()
+        self.font = pygame.font.SysFont("Arial", 16)
+        pymunk.pygame_util.positive_y_is_up = False
+        self.options = pymunk.pygame_util.DrawOptions(self.screen)
 
 
 def demo_simple_navigation(env, render=False, manual_control=False):
@@ -252,15 +283,21 @@ def demo_simple_navigation(env, render=False, manual_control=False):
 
                 if (event.type == pygame.KEYDOWN and
                         event.key == pygame.K_UP):
-                    action[1] = 1.0
+                    action[1] = -1.0
 
                 if (event.type == pygame.KEYDOWN and
                         event.key == pygame.K_DOWN):
-                    action[1] = -1.0
+                    action[1] = 1.0
         else:
             # Random action
             action = env.action_space.sample()
         state, reward, done, info = env.step((action))
+
+        cost = info['cost']
+        print(cost)
+
+        time.sleep(0.05)
+
         total_reward += reward
 
         if render:
